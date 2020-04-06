@@ -20,14 +20,12 @@ When a url must be followed by something else, it is formatted as follows:
   * Note that this is not unique
 * `statics`: An object of the static variables and functions in this type. Each is:
   * `pub`: Either `true` or `false`
-  * `name`: The name of that member
   * `typeid`: The type of that member
     This style was chosen to solve recursive structures in a single request.
   * `loc`:
     * `line`: The line at which this was bound
     * `col`: The column at which this was bound
-* `kind`: One of the primitive types or `struct`, `enum`, or `tuple`.
-* If `kind` is not primitive, then one of the following 3 members is also added:
+* If the type is not a primitive, then one of the following 3 members is also added:
   * `struct`: An array where each field is the same type as `statics`
     * Note that this is an array, while `statics` is an object. This is because order is only 
       important for fields.
@@ -35,7 +33,7 @@ When a url must be followed by something else, it is formatted as follows:
     * `tagType`: Either `i*` or `u*`. The primitive type that stores the tag.
     * `tags`: An array of objects, one for each discriminator
       * `name`: The name of this tag
-      * `contains`: Either empty or a typeID to denote what the union contains here.
+      * `contains`: Either non-existent or a typeID to denote what the union contains here.
       * `val`: The *numeric* value of the tag itself. (`1`, `2`, `-5`, etc)
   * `tuple`: An array of typeIDs.
 
@@ -44,16 +42,6 @@ When a url must be followed by something else, it is formatted as follows:
 * A series of keys->type objects where each key is a typeID.
 
 ## Compiler Methods
-* PUT /mkscope
-  * Registers a new scope with the typeserver. Any PUTs to a location inside this scope
-    will automatically be seen as inside this scope.
-  * Argument is a JSON object as follows:
-    * `parent`: The parent of this scope, formatted as a string of "*line_start*:*col_start*".
-    * `begin` and `end`: Strings to tell the beginning and end of this scope, formatted as 
-      "*line*:*col*" for each.
-  * Ligujo will check that `begin` is between `parent.(begin, end)`
-  * Ligujo will check that `end` is after `begin`
-  * Ligujo will check that `end` is between `parent.(begin, end)`
 * PUT /mktype
   * Registers one or more new types with Ligujo
   * Argument is a JSON object where each key is the typeID for that type and each value is
@@ -73,11 +61,3 @@ When a url must be followed by something else, it is formatted as follows:
   * Returns a JSON object formatted as follows
     * `primary`: The typeID of the bind found at *line*:*col*
     * A series of keys->type objects where each key is a typeID.
-* GET /scope/*line*:*col*/...
-  * Selects the *innermost* scope which *contains* the specified location.
-  * binds/
-    * Gets **all binds** available **as of** that location. (i.e it includes binds from parent 
-      scopes)
-    * Returns a JSON array containing objects as follows
-    * `name`: The name of that bind
-

@@ -1,0 +1,20 @@
+{
+  "20555": {
+  	"name": "Meal",
+  	"statics": {
+  		"numMealsMade": {
+    		"pub": true,
+    		"typeid": 32
+  		}
+  	},
+  	"enum": {
+  		"tagType": 32,
+  		"tags": [
+  			{
+    			"name": "Breakfast",
+    			"val": 0
+  			}
+  		]
+  	}
+  }
+}
