@@ -18,6 +18,7 @@ When a url must be followed by something else, it is formatted as follows:
 * `name`: The name of the type as specified in the program
   * For anonymous structs, the name is of the form `@struct_line_col`
   * Note that this is not unique
+* `pos`: The position this type was bound at, in `line:col` format
 * `statics`: An object of the static variables and functions in this type. Each is:
   * `pub`: Either `true` or `false`
   * `typeid`: The type of that member
