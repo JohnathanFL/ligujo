@@ -28,7 +28,7 @@ type Field struct {
 
 type Type struct {
   Name string `json:"name"`
-  Statics []Field `json:"Statics"`
+  Statics []Field `json:"statics"`
   Pos string `json:"pos"` // line:col
   // One of the TypeIDs for different types of types
   // If it's <= 2052, it's a primitive. Otherwise, it uses that operator
@@ -42,12 +42,14 @@ type Type struct {
 }
 
 func GetTypeFromID(id TypeID) (res *Type) {
+  fmt.Printf("Retrieving #%v\n", id)
   row := db.QueryRow("select name, pos, type, contained from Types where id = ?;", id)
   if row == nil { return nil }
 
   res = new(Type)
   
   row.Scan(&res.Name, &res.Pos, &res.Ty, &res.Backing)
+  fmt.Printf("  Found type %v @ %v of ty %v backed by %v\n", res.Name, res.Pos, res.Ty, res.Backing)
 
   {
     allStatics, _ := db.Query("select name, access, contains from Fields where type = ? and static = 1;", id)
@@ -55,7 +57,7 @@ func GetTypeFromID(id TypeID) (res *Type) {
     res.Statics = make([]Field, 0)
     for allStatics.Next() {
       var static Field
-      row.Scan(&static.Name, &static.Access, &static.Contains)
+      allStatics.Scan(&static.Name, &static.Access, &static.Contains)
       res.Statics = append(res.Statics, static)
     }
   }
@@ -65,7 +67,9 @@ func GetTypeFromID(id TypeID) (res *Type) {
     res.Statics = make([]Field, 0)
     for allFields.Next() {
       var field Field
-      row.Scan(&field.Name, &field.Access, &field.Contains)
+      err := allFields.Scan(&field.Name, &field.Access, &field.Contains)
+      fmt.Printf("    Err was %v\n", err)
+      fmt.Printf("    Found field %#v with access %v containing %v\n", field.Name, field.Access, field.Contains)
       res.Fields = append(res.Fields, field)
     }
   }
