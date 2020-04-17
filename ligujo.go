@@ -1,7 +1,7 @@
 package main
 
 import (
-  "bytes"
+  //"bytes"
 	"database/sql"
 	"fmt"
 	_ "go-sqlite3"
@@ -10,19 +10,67 @@ import (
 	"strings"
 	"time"
 	"io"
+	"io/ioutil"
 	"encoding/json"
+	"strconv"
 )
 
+type TypeID uint64
 
-type TypeStatic struct {
-  pub bool
-  typeid uint
+func (id TypeID) IsPrimitive() bool { return id <= 2052 }
+
+// Should be stored in a []Field or 
+type Field struct {
+  Access int32 `json:"access"` // One of 0,1,2 for priv, readonly, or pub
+  Name string `json:"name"`
+  Contains TypeID `json:"typeid"` // The type we hold
 }
 
-type NewType struct {
-  name string
-  statics map[string]TypeStatic
-  enum *EnumType
+type Type struct {
+  Name string `json:"name"`
+  Statics []Field `json:"Statics"`
+  Pos string `json:"pos"` // line:col
+  // One of the TypeIDs for different types of types
+  // If it's <= 2052, it's a primitive. Otherwise, it uses that operator
+  Ty TypeID `json:"ty"`
+  // If it's an enum, this is the tagType
+  // Otherwise it's currently unused
+  Backing TypeID `json:"backing"`
+  // If it's an enum, then pub is always true (ignored)
+  // If it's a tuple, they're numbered 0..=n
+  Fields []Field `json:"fields"`
+}
+
+func GetTypeFromID(id TypeID) (res *Type) {
+  row := db.QueryRow("select name, pos, type, contained from Types where id = ?;", id)
+  if row == nil { return nil }
+
+  res = new(Type)
+  
+  row.Scan(&res.Name, &res.Pos, &res.Ty, &res.Backing)
+
+  {
+    allStatics, _ := db.Query("select name, access, contains from Fields where type = ? and static = 1;", id)
+
+    res.Statics = make([]Field, 0)
+    for allStatics.Next() {
+      var static Field
+      row.Scan(&static.Name, &static.Access, &static.Contains)
+      res.Statics = append(res.Statics, static)
+    }
+  }
+  {
+    allFields, _ := db.Query("select name, access, contains from Fields where type = ? and static = 0;", id)
+
+    res.Statics = make([]Field, 0)
+    for allFields.Next() {
+      var field Field
+      row.Scan(&field.Name, &field.Access, &field.Contains)
+      res.Fields = append(res.Fields, field)
+    }
+  }
+
+  return res
 }
 
 /// The minimum number of parts to a path
@@ -34,6 +82,16 @@ const MIN_PUT_LEN = 2
 type RequestServer struct{}
 
 var db *sql.DB
+var insertStmt *sql.Stmt
+
+func HasType(id TypeID) bool {
+  if db == nil { return false }
+
+  rows, _ := db.Query("select COUNT(*) from Types where id = ?;", id)
+  var count uint32
+  rows.Scan(&count)
+  return count != 0
+}
 
 func (r RequestServer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	// We'll allow PUT/POST as synonyms since I can't find a good reason to restrict.
@@ -59,7 +117,7 @@ func HandleUpdate(res http.ResponseWriter, req *http.Request) {
   switch parts[1] {
     case "at": HandleAtUpdate(res, parts[2], req.Body)
     case "mktype": HandleMkType(res, req.Body)
-    default: res.WriteHeader(400)
+    default: res.WriteHeader(500)
   }
 }
 
@@ -70,8 +128,32 @@ func HandleAtUpdate(resp http.ResponseWriter, where string, body io.ReadCloser) 
 }
 
 func HandleMkType(resp http.ResponseWriter, body io.ReadCloser) {
-  buf := new(bytes.Buffer)
-  buf.R
+  fmt.Printf("Doing /mktype\n")
+  b, _ := ioutil.ReadAll(body)
+  
+  if len(b) == 0 {
+    // TODO: Get some better error codes in here
+    resp.WriteHeader(403)
+    return
+  }
+  //fmt.Printf("Body was:\n%s\n", b)
+
+  // Map of typeid -> type
+  var types map[TypeID]Type
+  err := json.Unmarshal(b, &types)
+  if err != nil { fmt.Printf("  Err was %v\n", err) }
+
+  
+  for id, ty := range types {
+    // Already know about it, and this is mktype,
+    // not some `updatetype`
+    if HasType(id) { continue }
+
+    fmt.Printf("Adding #%v(%v)", id, ty)
+
+    
+  }
+  
   resp.WriteHeader(200)
 }
 
@@ -88,10 +170,23 @@ func HandleRequest(res http.ResponseWriter, req *http.Request) {
 
   switch parts[1] {
     case "at": HandleAtRequest(res, parts[2])
+    case "typeid": HandleTypeIDRequest(res, parts[2])
     default:
       fmt.Printf("Received a request for invalid method GET %v", parts[1])
       res.WriteHeader(400)
   }
+}
+
+func HandleTypeIDRequest(resp http.ResponseWriter, id string) {
+  realID, err := strconv.ParseUint(id, 10, 32)
+  if err != nil { resp.WriteHeader(400); return }
+  ty := GetTypeFromID(TypeID(realID))
+
+  js, err := json.Marshal(ty)
+  if err != nil { resp.WriteHeader(500); return }
+
+  resp.WriteHeader(200)
+  resp.Write(js)
 }
 
 func HandleAtRequest(resp http.ResponseWriter, where string) {
@@ -117,6 +212,8 @@ func main() {
 	}
 	defer conn.Close()
 	db = conn
+	insertStmt, _ = db.Prepare("insert into Types (id, name, pos, type, contained, len) VALUES (?, ?, ?, ?, ?, ?);")
+	defer insertStmt.Close()
 
 	server.ListenAndServe()
 }

@@ -1,4 +1,6 @@
 #!/bin/dash
+# Generates the database with all primitive types
+
 sqlite3 'type.db' < make_tables.sql
 
 # Now we generate based on the following layout:
@@ -49,7 +51,11 @@ for i in $(seq 1 1024); do
   addBasicType $si "i$i"
 done
 
-addType 2049 "usize"
+addBasicType 2049 "usize"
 addBasicType 2050 "isize"
 addBasicType 2051 "bool"
-addBasicType 2052 "type"
+addBasicType 2052 "f16"
+addBasicType 2053 "f32"
+addBasicType 2054 "f64"
+addBasicType 2055 "f128"
+addBasicType 2056 "type"
