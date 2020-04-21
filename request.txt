@@ -1,0 +1,37 @@
+{
+    "431136": {
+        "name": "Meal",
+        "statics": [
+            {
+                    "access": 1,
+                    "name": "numMealsMade",
+                    "typeid": 32
+            }
+        ],
+        "ty": 1,
+        "backing": 32,
+        "fields": [
+            {
+                "access": 2,
+                "name": "Breakfast",
+                "typeid": 0
+            },
+            {
+                "access": 2,
+                "name": "Lunch",
+                "typeid": 0
+            },
+            {
+                "access": 2,
+                "name": "Supper",
+                "typeid": 0
+            },
+            {
+              "access": 2,
+              "name": "Snack",
+              "typeid": 32
+            }
+            
+        ]
+    }
+}

@@ -2,6 +2,7 @@ package main
 
 import (
   //"bytes"
+  "errors"
 	"database/sql"
 	"fmt"
 	_ "go-sqlite3"
@@ -35,20 +36,24 @@ type Type struct {
   Ty TypeID `json:"ty"`
   // If it's an enum, this is the tagType
   // Otherwise it's currently unused
+  // Called `Contained` in SQL
   Backing TypeID `json:"backing"`
+  // Only used for Arrays and Tuples
+  Len uint
   // If it's an enum, then pub is always true (ignored)
   // If it's a tuple, they're numbered 0..=n
   Fields []Field `json:"fields"`
 }
 
-func GetTypeFromID(id TypeID) (res *Type) {
+func GetTypeFromID(id TypeID) (res *Type, err error) {
   fmt.Printf("Retrieving #%v\n", id)
   row := db.QueryRow("select name, pos, type, contained from Types where id = ?;", id)
-  if row == nil { return nil }
+  if row == nil { res = nil; err = errors.New("No type row found.") ; return }
 
   res = new(Type)
   
-  row.Scan(&res.Name, &res.Pos, &res.Ty, &res.Backing)
+  err = row.Scan(&res.Name, &res.Pos, &res.Ty, &res.Backing)
+  if err != nil { res = nil; err = errors.New("No type row found."); return }
   fmt.Printf("  Found type %v @ %v of ty %v backed by %v\n", res.Name, res.Pos, res.Ty, res.Backing)
 
   {
@@ -74,7 +79,8 @@ func GetTypeFromID(id TypeID) (res *Type) {
     }
   }
 
-  return res
+  err = nil
+  return 
 }
 
 /// The minimum number of parts to a path
@@ -145,7 +151,11 @@ func HandleMkType(resp http.ResponseWriter, body io.ReadCloser) {
   // Map of typeid -> type
   var types map[TypeID]Type
   err := json.Unmarshal(b, &types)
-  if err != nil { fmt.Printf("  Err was %v\n", err) }
+  if err != nil {
+    fmt.Printf("  Err was %v\n", err)
+    resp.WriteHeader(400)
+    return
+  }
 
   
   for id, ty := range types {
@@ -155,6 +165,40 @@ func HandleMkType(resp http.ResponseWriter, body io.ReadCloser) {
 
     fmt.Printf("Adding #%v(%v)", id, ty)
 
+    _, err := db.Exec(
+      "insert into Types (id, name, pos, type, contained, len) VALUES (?, ?, ?, ?, ?, ?);",
+      id, ty.Name, ty.Pos, ty.Ty, ty.Backing, ty.Len,
+    )
+    if err != nil {
+      fmt.Printf("Insert err was: %v", err)
+      resp.WriteHeader(400)
+      return
+    }
+
+    for _, static := range ty.Statics {
+      _, err := db.Exec(
+        "insert into Fields (static, type, name, access, contains, isRet) VALUES (1, ?, ?, ?, ?, NULL);",
+        id, static.Name, static.Access, static.Contains,
+      )
+      if err != nil {
+        fmt.Printf("Insert static err was: %v", err)
+        resp.WriteHeader(400)
+        return
+      }
+    }
+
+    for _, field := range ty.Fields {
+      _, err := db.Exec(
+        "insert into Fields (static, type, name, access, contains, isRet) VALUES (0, ?, ?, ?, ?, NULL);",
+        id, field.Name, field.Access, field.Contains,
+      )
+
+      if err != nil {
+        fmt.Printf("Insert field err was: %v", err)
+        resp.WriteHeader(400)
+        return
+      }
+    }
     
   }
   
@@ -184,7 +228,8 @@ func HandleRequest(res http.ResponseWriter, req *http.Request) {
 func HandleTypeIDRequest(resp http.ResponseWriter, id string) {
   realID, err := strconv.ParseUint(id, 10, 32)
   if err != nil { resp.WriteHeader(400); return }
-  ty := GetTypeFromID(TypeID(realID))
+  ty, err := GetTypeFromID(TypeID(realID))
+  if err != nil { resp.WriteHeader(400); return }
 
   js, err := json.Marshal(ty)
   if err != nil { resp.WriteHeader(500); return }
